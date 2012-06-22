@@ -3,10 +3,8 @@
 
 = Situation =
 
-[http://www-i6.informatik.rwth-aachen.de/~rybach/cache-manager-architecture.png]
+[http://www-i6.informatik.rwth-aachen.de/~rybach/cache-manager-architecture-small.png]
 
 = Problems =
 
 = Solution =
-
-
