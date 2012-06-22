@@ -1,12 +1,15 @@
 #summary Problems and Solutions
-#labels Featured
 
 = Situation =
 The targeted cluster computer environment looks like this:
 
 [http://www-i6.informatik.rwth-aachen.de/~rybach/cache-manager-architecture-small.png]
 
-We have a couple of file servers with large storage backends and a large number of compute nodes. All components are connect by (gigabit) ethernet. The file server storage is available on all compute nodes using a network file system like NFS.
+We have a couple of file servers with large storage backends and a
+large number of compute nodes. All components are connect by (gigabit)
+ethernet. The file server storage is available on all compute nodes
+using a network file system like NFS. Each of the compute nodes has a
+local (e.g. SATA attached) hard disk of customary size.
 
 = Problems =
 
