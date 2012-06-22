@@ -1,4 +1,5 @@
 #summary CacheManager Installation
+#labels Featured
 
 = Introduction =
 
