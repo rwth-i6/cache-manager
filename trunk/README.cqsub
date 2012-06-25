@@ -1,0 +1,54 @@
+NAME
+   cqsub - submit batch job to SGE considering local caches
+
+SYNTAX
+   cqsub [--try-hard] <options>
+
+DESCRIPTION
+   cqsub is a wrapper script for qsub which tries to schedule batch jobs on a
+   node which already has local copies of as many files as possible.
+
+   It detects calls to 'cf' in the job script and analyzes the files to be
+   cached. Files depending on the SGE_TASK_ID receive special treatment.
+
+   If --try-hard is set, cqsub tries first to submit the job (or job task) to
+   hosts having local copies, in the order of local cache size.
+   Otherweise the job is submitted with a soft queue list.
+
+MODIFICATION OF JOB SCRIPTS
+   Job-scripts have to include cftools.sh:
+     source /u/rybach/apps/cache-manager/cftools.sh
+   
+   Commands which should not be executed in the preparation mode of cqsub (like
+   the main program of the script) have to be called using cf_exec. E.g.:
+     cf_exec /path/to/programm --optionA --optionB
+     
+EXAMPLE
+   Job script testsub.sh
+   -------------------------------------------------------
+    #!/bin/bash
+    #$ -j y
+    #$ -cwd
+    #$ -S /bin/bash
+    #$ -l h_vmem=200M
+    #$ -l h_rt=00:05:00
+    
+    source /u/rybach/work/prog/cache-manager/cftools.sh
+    
+    export SGE_TASK_ID=`printf "%04d" $SGE_TASK_ID`
+    
+    FILE_A=$(cf ~/temp/fileA.dat)
+    FILE_B=$(cf ~/temp/fileB.dat)
+    FILE_T=$(cf ~/temp/fileT.${SGE_TASK_ID}.dat)
+    
+    cf_exec /bin/echo $(cf ~/temp/fileC.dat) $FILE_A $FILE_B 
+    cf_exec touch $TMPDIR/testq
+    $(cf -cp $TMPDIR/testq /work/speech/rybach/temp/testq)
+   -------------------------------------------------------
+
+   Call to cqsub:
+    cqsub -N my-job -t 1-10:2 testsub.sh paramA paramB
+
+VERSION
+   $Id$
+

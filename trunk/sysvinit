@@ -1,0 +1,121 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          cache-manager
+# Required-Start:    $local_fs $remote_fs
+# Required-Stop:     $local_fs $remote_fs
+# Default-Start:     3 5
+# Default-Stop:      0 1 6
+# Short-Description: CacheManager
+# Description:       CacheManager for distibuted file caching 
+### END INIT INFO
+
+# Author: David Rybach <rybach@i6.informatik.rwth-aachen.de>
+
+# PATH should only include /usr/* if it runs after the mountnfs.sh script
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+DESC="i6 cache manager"
+CMDIR=/opt/cache-manager
+CMUSER=cmserver
+CMGROUP=cmserver
+EXEC=${CMDIR}/server.sh
+NAME=cmserver
+
+
+VERBOSE=yes
+
+log_begin_msg () {
+    if [ -z "${1:-}" ]; then
+        return 1
+    fi
+    echo -n "$@"
+}
+
+log_daemon_msg () {
+    if [ -z "${1:-}" ]; then
+        return 1
+    fi
+
+    if [ -z "${2:-}" ]; then
+        echo -n "$1:"
+        return
+    fi
+    
+    echo -n "$1: $2"
+}
+
+log_end_msg () {
+    # If no arguments were passed, return
+    [ -z "${1:-}" ] && return 1
+
+    if [ $1 -eq 0 ]; then
+        echo "."
+    else
+        echo " failed!"
+    fi
+    return $1
+}
+#
+# Function that starts the daemon/service
+#
+do_start()
+{
+	ulimit -n 4096
+	start-stop-daemon --start -c ${CMUSER}:${CMGROUP} -d $CMDIR -b --make-pidfile \
+			  --pidfile /var/run/$NAME --exec $EXEC
+}
+
+#
+# Function that stops the daemon/service
+#
+do_stop()
+{
+	start-stop-daemon --stop -u $CMUSER
+}
+
+
+case "$1" in
+  start)
+	[ "$VERBOSE" != no ] && log_daemon_msg "Starting $DESC" "$NAME"
+	do_start
+	case "$?" in
+		0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		*) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
+	;;
+  stop)
+	[ "$VERBOSE" != no ] && log_daemon_msg "Stopping $DESC" "$NAME"
+	do_stop
+	case "$?" in
+		0) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		*) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
+	;;
+  restart|force-reload)
+	#
+	# If the "reload" option is implemented then remove the
+	# 'force-reload' alias
+	#
+	log_daemon_msg "Restarting $DESC" "$NAME"
+	do_stop
+	case "$?" in
+	  0|1)
+		do_start
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ;; # Old process is still running
+			*) log_end_msg 1 ;; # Failed to start
+		esac
+		;;
+	  *)
+	  	# Failed to stop
+		log_end_msg 1
+		;;
+	esac
+	;;
+  *)
+	echo "Usage: $SCRIPTNAME {start|stop|restart}" >&2
+	exit 3
+	;;
+esac
+
+:
