@@ -43,9 +43,9 @@ compute nodes is expected to be unsafe.
 {{{
    # retrieve /bigstorage/my/file.dat from file server and store it locally
    # generate output on local storage
-   sort $(cf /bigstorage/my/file.dat) > /localstorage/${USER}/mu/sorted.dat
+   sort $(cf /bigstorage/my/file.dat) > /localstorage/${USER}/my/sorted.dat
    # copy (managed) output to file server
-   cf -cp /localstorage/${USER}/mu/sorted.dat /bigstorage/my/file.dat
+   cf -cp /localstorage/${USER}/my/sorted.dat /bigstorage/my/file.dat
 }}}
    
  * Disk usage on the compute nodes is monitored and unused files are removed automatically.
