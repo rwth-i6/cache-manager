@@ -36,12 +36,13 @@ compute nodes is expected to be unsafe.
 
  * Copies of files on local hard disks are registered with CacheManager server, such that requested file copies can be served  from other compute nodes if available, which reduces the load of the file server.
 
- * The CacheManager client can be used as a replacement for the  `cp` command in a scripting layer. For example: {{{
+ * The CacheManager client can be used as a replacement for the  `cp` command in a scripting layer. For example:
+{{{
    # retrieve /bigstorage/my/file.dat from file server and store it locally
    # generate output on local storage
    sort $(cf /bigstorage/my/file.dat) > /localstorage/${USER}/mu/sorted.dat
    # copy (managed) output to file server
    cf -cp /localstorage/${USER}/mu/sorted.dat /bigstorage/my/file.dat
-   }}}
+}}}
    
  * Disk usage on the compute nodes is monitored and unused files are removed automatically.
