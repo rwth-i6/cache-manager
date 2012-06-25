@@ -68,7 +68,7 @@ lf = cachemanager.cacheFile(fileServerPath)
 # copy a local file to the file server
 cachemanager.copyFile(lf, "/bigstorage/my/file")
 
-# re-use connection to file server for multiple files
+# re-use connection to server for multiple files
 config = cachemanager.client.ClientConfiguration()
 config.loadDefault()
 cachemanager.client.CmClient(config, False)
