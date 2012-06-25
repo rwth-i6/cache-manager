@@ -15,7 +15,7 @@ files. See also [Configuration]
 = Requirements =
 
   * Python 2.x (tested with Python 2.4 - 2.6)
-  * SSH (if SSH connections are used for intra-node communication) with password-less login on all compute nodes
+  * SSH (if SSH connections are used for inter-node communication) with password-less login on all compute nodes
 
 = Server =
 
@@ -33,5 +33,8 @@ permission for the log file and the database file.
 
 The package has to be installed on all used compute nodes as well or
 in a network reachable file system. The wrapper script `cf` can be
-installed in a system directory like `/usr/local/bin`. You can run
-the regression tests in `test.sh` to check your installation.
+installed in a system directory like `/usr/local/bin`.
+
+You can run the regression tests in `test.sh` to check your
+installation. The header of `test.sh` has be modified in order to
+match your environemnt.
