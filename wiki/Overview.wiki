@@ -16,13 +16,13 @@ compute nodes is expected to be unsafe.
 
 = Problems =
 
- * Data-intense application running in the cluster access the file server in massively parallel. The parallel I/O often exhausts the available bandwidth of the network and the storage connection.
+ * Data-intense applications running in the cluster access the file server in massively parallel. The parallel I/O often exhausts the available bandwidth of the network and the storage connection.
 
  * High-performance storage solutions are expensive and incompatible with the need for large amounts of disk capacity under a limited budget.
 
  * Distributed file systems require modifications of the operating systems running on the compute node or modifications of the applications running on the cluster, both modifications are  undesired.
 
- * The local hard disks of the compute nodes, which offer good performance (but relatively low capacity) remain unused.
+ * The local hard disks of the compute nodes, which offer good performance (but relatively low capacity), remain unused.
 
 = Solution =
 
