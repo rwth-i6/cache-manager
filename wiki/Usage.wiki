@@ -52,7 +52,7 @@ See also [Configuration].
     * `--debug`: enable debug output
     * ` --bundle`: treat file as bundle
     * `--conjunct`: cache all files or none (for bundles)
-    * `--nobundle`: ignore special meaning of *.bundle files
+    * `--nobundle`: ignore special meaning of .bundle files
 
 
 = Python API =
