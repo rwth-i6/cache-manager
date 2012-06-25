@@ -54,3 +54,31 @@ See also [Configuration].
     * `--conjunct`: cache all files or none (for bundles)
     * `--nobundle`: ignore special meaning of *.bundle files
 
+
+= Python API =
+The CacheManager offers its functionality also as a Python module
+{{{
+
+import cachemanager
+
+...
+# get path of the local copy
+lf = cachemanager.cacheFile(fileServerPath)
+
+# copy a local file to the file server
+cachemanager.copyFile(lf, "/bigstorage/my/file")
+
+# re-use connection to file server for multiple files
+config = cachemanager.client.ClientConfiguration()
+config.loadDefault()
+cachemanager.client.CmClient(config, False)
+
+cachedFiles = []
+for f in files:
+    cachedFiles.append(client.fetch(f)
+}}}
+
+
+
+
+
