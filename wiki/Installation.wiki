@@ -4,9 +4,7 @@
 = Introduction =
 
 CacheManager is written in Python. The server has to be installed on a
-network reachable machine.  The client has be installed on all
-cluster machines. The database of the server kept in memory and stored
-frequently on disk.
+network reachable machine. It's recommended to use a dedicated machine and not to run it on one of your file servers. The client has to be installed on all cluster machines. The database of the server is kept in memory and gets stored frequently on disk.
 
 The default configuration can be changed in the file
 `settings.py`. Both server and clients have additional configuration
@@ -31,10 +29,10 @@ permission for the log file and the database file.
 
 = Client =
 
-The package has to be installed on all used compute nodes as well or
+The package has to be installed on all used compute nodes or
 in a network reachable file system. The wrapper script `cf` can be
 installed in a system directory like `/usr/local/bin`.
 
 You can run the regression tests in `test.sh` to check your
-installation. The header of `test.sh` has be modified in order to
+installation. The header of `test.sh` has to be modified in order to
 match your environemnt.
