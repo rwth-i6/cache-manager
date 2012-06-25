@@ -21,7 +21,7 @@ compute nodes is expected to be unsafe.
 
  * High-performance storage solutions are expensive and incompatible with the need for large amounts of disk capacity under a limited budget.
 
- * Distributed file systems require modifications of the operating systems running on the compute node or modifications of the applications running on the cluster, both modifications are  undesired.
+ * Distributed file systems require modifications of the operating systems running on the compute nodes (e.g. file system drivers) or modifications of the applications running on the cluster, both modifications are  undesired.
 
  * The local hard disks of the compute nodes, which offer good performance (but relatively low capacity), remain unused.
 
