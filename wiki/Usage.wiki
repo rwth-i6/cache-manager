@@ -43,14 +43,14 @@ User-specific configuration file: `~/.cmclient`.
 See also [Configuration].
 
 = Options =
-  * get local copy: `cm-client.py [options] <filename>`
-  * copy local file to file server: `cm-client.py [options] -cp [-n|--noregister] <source> <destination>`
+  * get local copy: `cf [options] <filename>`
+  * copy local file to file server: `cf [options] -cp [-n|--noregister] <source> <destination>`
      `--noregister`: don't register local copy
-  * retrieve locations of local copies: `cm-client.py [options] -l <filenames>`
-  
-  * `--config <file>`: use alternative configuration
-  * `--debug`: enable debug output
-  * ` --bundle`: treat file as bundle
-  * `--conjunct`: cache all files or none (for bundles)
-  * `--nobundle`: ignore special meaning of *.bundle files
+  * retrieve locations of local copies: `cf [options] -l <filenames>`
+  * options:
+    * `--config <file>`: use alternative configuration
+    * `--debug`: enable debug output
+    * ` --bundle`: treat file as bundle
+    * `--conjunct`: cache all files or none (for bundles)
+    * `--nobundle`: ignore special meaning of *.bundle files
 
