@@ -1,0 +1,170 @@
+#!/bin/bash 
+# cqsub
+#
+# This file is part of CacheManager.
+# 
+# CacheManager is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or
+# (at your option) any later version.
+# 
+# CacheManager is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with CacheManager. If not, see <http://www.gnu.org/licenses/>.
+#
+# Copyright 2012, RWTH Aachen University. All rights reserved.
+
+# see README.cqsub 
+# $Id: cqsub 715 2009-12-09 17:29:03Z rybach $
+
+if [ -h $0 ]; then
+    CFQ_SELF=$(readlink $0)
+else
+    CFQ_SELF=$0
+fi
+source $(dirname $CFQ_SELF)/cftools.sh
+CFQ_PREPARE=1
+CFQ_CACHE=$(mktemp)
+CFQ_FILES=$(mktemp)
+CFQ_HOSTS=$(mktemp)
+CFQ_BUFFER=$(mktemp)
+CFQ_NEEDTASKID=$(mktemp)
+CFQ_DETECT_ID=-9999999999
+CFQ_TRYHARD=0
+trap "rm -f $CFQ_FILES $CFQ_HOSTS $CFQ_NEEDTASKID $CFQ_CACHE $CFQ_BUFFER" EXIT
+
+function getScriptFile()
+{
+    qsub -verify $* | awk '/^script_file/ { print $2 }'
+}
+
+function getArrayTasks()
+{
+    qsub -verify $* | awk '/^job-array tasks/ { print $3 }'
+}
+
+function readScript()
+{
+    local scriptFile=$1
+    SGE_TASK_ID=$2
+    shift 2
+    rm -f $CFQ_HOSTS $CFQ_FILES
+    touch $CFQ_FILES
+    touch $CFQ_BUFFER
+    source $scriptFile
+}
+
+function submitJob()
+{
+    local jobSubmitted=0
+    local queues=
+    local options=$*
+    local cmd
+    cat $CFQ_FILES | \
+      awk -F : '{ hosts[$1] += $3; } END { for (h in hosts)  print h, hosts[h] }' | \
+      sort -n -k 2 -t " " -r > $CFQ_HOSTS
+    while read line; do
+        host=${line%% *}
+        queues="${queues},*@${host}"
+        size=${line##* }
+        if [ $CFQ_TRYHARD -eq 1 ]; then
+            cfq_log "try to submit to $host ($size bytes cached)"
+            cmd="qsub -now y -w e -q "*@$host" $options"
+            cfq_log "$cmd"
+            $cmd
+            if [ $? -eq 0 ]; then
+                cfq_log "job submitted"
+                jobSubmitted=1
+                break
+            fi
+        else
+            cfq_log "adding host $host ($size bytes cached)"
+        fi
+    done < $CFQ_HOSTS
+    if [ $jobSubmitted -eq 0 ]; then
+        if [ -n "${queues}" ]; then
+            cfq_log "submitting job with soft queue requirement"
+            cmd="qsub -soft -q ${queues:1} -hard $options"
+            cfq_log "$cmd"
+            $cmd
+        else
+            cfq_log "no cached files found"
+            cmd="qsub $options"
+            cfq_log "$cmd"
+            $cmd
+        fi
+    fi
+}
+
+function submitArrayTasks()
+{
+    local taskDef=$(getArrayTasks $CFQ_COMMANDLINE)
+    if [ -z $taskDef ]; then
+        cfq_error "no job-array tasks defined"
+        exit 1
+    fi
+    local inc=${taskDef##*:}
+    local range=${taskDef%:*}
+    local taskStart=${range%-*}
+    local taskEnd=${range#*-}
+    local scriptName=
+    local newOpt=$(echo "$CFQ_COMMANDLINE " | sed -e "s/^\(.*\)\( -t [^ ]\+\)\(.* ${CFQ_SCRIPTFILE} .*\)\$/\1 \3/")
+    local j
+    cp $CFQ_FILES $CFQ_BUFFER
+    for ((j=${taskStart};j<=${taskEnd};j+=${inc})); do
+        cfq_log "processing task $j (${taskStart}-${taskEnd}:${inc})"
+        readScript $CFQ_SCRIPTFILE $j $CFQ_SCRIPT_PARAM
+        cat $CFQ_BUFFER >> $CFQ_FILES
+        submitJob -t $j $newOpt
+    done
+}
+
+function usage()
+{
+    echo "usage: "$(basename $0)" [--try-hard] <options>"
+    echo "  use this tool as replacement for qsub."
+    echo "  all options are passed trough to qsub"
+    exit 1
+}
+
+if [ -z $1 ]; then
+    usage
+    exit 1
+fi
+
+
+echo 0 > $CFQ_NEEDTASKID
+CFQ_COMMANDLINE=$*
+
+# remove cqsub options
+expr match "${CFQ_COMMANDLINE}" "\(.*--try-hard.*\)"  &> /dev/null
+if [ $? -eq 0 ]; then
+    CFQ_TRYHARD=1
+    tmp=$(echo $CFQ_COMMANDLINE | sed -e 's/^\(.*\)\(--try-hard \)\(.*\)$/\1 \3/')
+    CFQ_COMMANDLINE=$tmp
+fi
+
+CFQ_SCRIPTFILE=$(getScriptFile $CFQ_COMMANDLINE)
+
+# remove qsub parameters
+while [ $1 != $CFQ_SCRIPTFILE ]; do
+    shift
+done
+shift
+CFQ_SCRIPT_PARAM=$*
+
+readScript $CFQ_SCRIPTFILE $CFQ_DETECT_ID $CFQ_SCRIPT_PARAM
+
+if [ $(cat $CFQ_NEEDTASKID) -eq 1 ]; then
+    cfq_log switching to job-array mode
+    submitArrayTasks
+else
+    submitJob $CFQ_COMMANDLINE
+fi
+
+
+

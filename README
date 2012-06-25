@@ -1,0 +1,31 @@
+cache manager - load balanced file caching on local harddisks
+
+See also http://code.google.com/p/cache-manager/wiki/Usage
+
+cm-client.py
+
+ Uses the configuration in ~/.cmclient
+ (see cmclient.config)
+
+  cm-client.py <filename>
+    Copy <filename> to the local harddisk. If possible, existing 
+    copies on other compute nodes will be used. A central
+    server instanced keeps track of the copies and controlls the
+    number of parallel transfers.
+    If there is not enough space left on the local disk (see 
+    MIN_FREE and MAX_USAGE in the configuration file), older files
+    will be deleted.
+    The location of the cached file is returned on stdout. If
+    the caching is not possible for any reason, the original
+    filename will be returned.
+
+  cm-client.py -cp <source> <destination>
+    Copy <source> to <destination> and register <source> as copy
+    of <destination> on the server instance.
+
+
+cm-server.py
+  
+  cm-server.py <config-file>
+  See cmserver.config
+
