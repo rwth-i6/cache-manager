@@ -20,6 +20,8 @@ respectively.
   * `STAT_TIMEOUT`: time to wait for status operations on remote files (seconds)
   * `IGNORE_BUNDLE`: ignore special meaning of bundle archives (.bundle) (boolean)
 
+A template can be found in `cmclient.config`.
+
 = Server = 
   * `PORT`: TCP port number used
   * `CONNECTION_QUEUE`: queue size of the server socket
@@ -33,6 +35,8 @@ respectively.
   * `MAX_WAIT_COPY`: maximum time a client may spend copying (seconds). If a client does not answer within this interval, the connection is assumed dead.
   * `CLIENT_WAIT`: time a client has to wait if the `MAX_COPY_SERVER` is reached before next copy attempt (seconds)
   * `MAX_AGE`: time after an unused record in the database is deleted (seconds)
+
+A template can be found in `cmserver.config`.
 
 = Inter-Node Communication =
 
@@ -48,4 +52,4 @@ If the same client configuration is used in different environments,
 i.e. with different CacheManager servers, cache directories, or
 inter-node communication methods, you can define these environment
 specific values in a new `ClientEnvironment` class. See
-`environment.py` for an example.
+`environment.py` and `settings.multienv.py` for an example.
