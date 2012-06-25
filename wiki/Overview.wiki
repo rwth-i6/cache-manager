@@ -1,4 +1,5 @@
 #summary Problems and Solutions
+#labels Featured
 
 = Situation =
 The targeted cluster computer environment looks like this:
@@ -34,7 +35,9 @@ compute nodes is expected to be unsafe.
 
  * Parallel access of the file server is limited to a certain number of connections at a time. If the maximum number of allowed connections is reached, client access is serialized.
 
- * Copies of files on local hard disks are registered with CacheManager server, such that requested file copies can be served  from other compute nodes if available, which reduces the load of the file server.
+ * Copies of files on local hard disks are registered with CacheManager server, such that requested file copies can be served  from other compute nodes if available, which reduces the load of the file server. Modifications are checked using file size and modification time.
+
+ * Files on remote compute nodes can be accessed using NFS or SSH.
 
  * The CacheManager client can be used as a replacement for the  `cp` command in a scripting layer. For example:
 {{{
@@ -46,3 +49,6 @@ compute nodes is expected to be unsafe.
 }}}
    
  * Disk usage on the compute nodes is monitored and unused files are removed automatically.
+ 
+ * Dedicated access control is not required by leveraging access control of the underlying file system.
+ 
