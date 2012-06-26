@@ -25,7 +25,7 @@ define the installation directory.
 
 You can use `sysvinit` to start the server at boot time. The script
 assumes a system user `cmserver` and a group `cmserver` with write
-permission for the log file and the database file.
+permission for the [LogFile log file] and the database file.
 
 = Client =
 
