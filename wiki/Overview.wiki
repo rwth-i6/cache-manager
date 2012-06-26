@@ -51,4 +51,9 @@ compute nodes is expected to be unsafe.
  * Disk usage on the compute nodes is monitored and unused files are removed automatically.
  
  * Dedicated access control is not required by leveraging access control of the underlying file system.
- 
+
+= Table of contents = 
+ # [Installation]
+ # [Configuration]
+ # [Usage]
+ # Analyzing the [LogFile log file]
