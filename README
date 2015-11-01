@@ -1,6 +1,8 @@
 cache manager - load balanced file caching on local harddisks
 
-See also https://github.com/pavelgolik/cache-manager/wiki
+See also 
+ https://www-i6.informatik.rwth-aachen.de/~rybach/cache-manager.php
+ https://github.com/pavelgolik/cache-manager/wiki
 
 cm-client.py
 
