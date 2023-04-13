@@ -50,5 +50,5 @@ EXAMPLE
     cqsub -N my-job -t 1-10:2 testsub.sh paramA paramB
 
 VERSION
-   $Id$
+   $Id: README.cqsub 676 2009-02-02 16:08:34Z rybach $
 

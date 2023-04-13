@@ -1,22 +1,3 @@
-# fetcher.py
-#
-# This file is part of CacheManager.
-# 
-# CacheManager is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# 
-# CacheManager is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with CacheManager. If not, see <http://www.gnu.org/licenses/>.
-#
-# Copyright 2012, RWTH Aachen University. All rights reserved.
-
 """
 file fetcher for cache manager client
 """
@@ -25,10 +6,10 @@ import os.path
 import time
 import threading
 from shared import Message
-from logging import *
+from cmlogging import *
 import settings
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 837 $"
 __author__  = "rybach@cs.rwth-aachen.de (David Rybach)"
 __copyright__ = "Copyright 2012, RWTH Aachen University"
 
@@ -40,21 +21,27 @@ class PingThread (threading.Thread):
     def __init__(self, conn, interval):
         threading.Thread.__init__(self)
         self.conn = conn
-	self.interval = interval
+        self.interval = interval
         self.finished = threading.Event()
 
     def run(self):
         while not self.finished.isSet():
-	    try:
-		self.finished.wait(self.interval)
-		if not self.finished.isSet():
-		    self.conn.sendMessage(Message(Message.PING, []))
-	    except Exception, e:
-		warning("exception in PingThread: %s" % str(e))
-		break
+            try:
+                self.finished.wait(self.interval)
+                if not self.finished.isSet():
+                    self.conn.sendMessage(Message(Message.PING, []))
+            except Exception as e:
+                warning("exception in PingThread: %s" % str(e))
+                break
 
     def stop(self):
         self.finished.set()
+
+    @staticmethod
+    def create(conn, config):
+        pt = PingThread(conn, config.SOCKET_TIMEOUT / 2)
+        pt.start()
+        return pt
 
 class CacheFetcher:
 
@@ -89,18 +76,13 @@ class CacheFetcher:
         return (int(originalFileInfo[1]) == int(checkFileInfo[1]) and \
                 int(float(originalFileInfo[2])) == int(float(checkFileInfo[2])))
 
-    def startPingThread(self):
-	pt = PingThread(self.conn, self.config.SOCKET_TIMEOUT / 2)
-	pt.start()
-	return pt
-
     def copyFromNode(self, fileinfo, host, filename, destination):
         debug("copy from node: %s, %s, %s" % (host, filename, destination))
         log("start copying %s:%s" % (host, filename))
-	pt = self.startPingThread()
+        pt = PingThread.create(self.conn, self.config)
         copyOK, msg = self.remoteSystem.copyFile(host, filename, destination)
-	pt.stop()
-	del pt
+        pt.stop()
+        del pt
         if not copyOK:
             log("%s" % msg)
             error("cannot copy %s:%s to %s" % (host, filename, destination))
@@ -116,28 +98,28 @@ class CacheFetcher:
         log("start copying %s" % filename)
         try:
             # shutil.copy2(filename, destination)
-	    pt = self.startPingThread()
-	    copyOk, msg = self.remoteSystem.copyUsingCp(filename, destination)
-	    pt.stop()
-	    del pt
-	    if not copyOk:
-		raise Exception(msg)
+            pt = PingThread.create(self.conn, self.config)
+            copyOk, msg = self.remoteSystem.copyUsingCp(filename, destination)
+            pt.stop()
+            del pt
+            if not copyOk:
+                raise Exception(msg)
             log("copied %s" % filename)
             self.fileSystem.setATime(destination)
             return True
-        except Exception, e:
+        except Exception as e:
             error("cannot copy %s to %s: %s" % (filename, destination, str(e)))
             return False
 
-    def requestFile(self, fileinfo, destination):
+    def requestFile(self, fileinfo, destination, locateLimit=99999):
         debug("requestFile: " + str(fileinfo))
         fileserver = self.fileSystem.getFileServer(fileinfo[0])
         debug("file server: " + fileserver)
-        return self.conn.sendMessage(Message(Message.REQUEST_FILE, fileinfo + [fileserver, destination]))
+        return self.conn.sendMessage(Message(Message.REQUEST_FILE, fileinfo + [fileserver, destination, str(locateLimit)]))
 
-    def requestFileLocations(self, fileinfo):
-        debug("requestFileLocations: " + str(fileinfo))
-        return self.conn.sendMessage(Message(Message.GET_LOCATIONS, fileinfo))
+    def requestFileLocations(self, fileinfo, locateLimit=999999):
+        debug("requestFileLocations: %s, %d locations" % (str(fileinfo), locateLimit))
+        return self.conn.sendMessage(Message(Message.GET_LOCATIONS, fileinfo + [str(locateLimit)]))
 
     def sendFileLocation(self, fileinfo, destination):
         debug("sendFileLocation: %s, %s" % (str(fileinfo), destination))
@@ -161,16 +143,16 @@ class CacheFetcher:
 
     def isActive(self, destination):
         """ return: waiting time """
-	debug("isActive: %s" % destination)
-	r = self.conn.sendMessage(Message(Message.IS_ACTIVE, [destination]))
+        debug("isActive: %s" % destination)
+        r = self.conn.sendMessage(Message(Message.IS_ACTIVE, [destination]))
         msg = self.conn.receiveMessage()
-	if not msg:
-	    error("connection reset")
-	    return 0
-	elif msg.type == Message.WAIT:
-	    return int(msg.content[0])
-	else:
-	    return 0
+        if not msg:
+            error("connection reset")
+            return 0
+        elif msg.type == Message.WAIT:
+            return int(msg.content[0])
+        else:
+            return 0
 
 
     def handleMessage(self, fileinfo, destination, msg):

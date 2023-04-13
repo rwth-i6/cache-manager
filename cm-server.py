@@ -1,23 +1,4 @@
-#!/usr/bin/env python
-# cm-server.py
-#
-# This file is part of CacheManager.
-# 
-# CacheManager is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# 
-# CacheManager is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with CacheManager. If not, see <http://www.gnu.org/licenses/>.
-#
-# Copyright 2012, RWTH Aachen University. All rights reserved.
-
+#!/usr/bin/env python3
 """
 cache management server
 supervises load balanced file caching on local harddisks
@@ -33,9 +14,9 @@ import random
 import signal
 import gzip
 from shared import Message, Configuration, Connection
-from logging import *
+from cmlogging import *
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 831 $"
 __author__  = "rybach@cs.rwth-aachen.de (David Rybach)"
 __copyright__ = "Copyright 2012, RWTH Aachen University"
 
@@ -185,6 +166,25 @@ class CopyCounter:
 	    except KeyError: pass
 	finally:
 	    self.lock.release()
+
+    def updateToken(self, host, destNode, token):
+	debug("updateToken: %s %s %s" % (host, destNode, str(token)))
+	self.lock.acquire()
+	newToken = int(time.time())
+	try:
+	    self.counters[host][1].remove(token)
+	    self.counters[host][1].append(newToken)
+	    transfers = self.activeTransfers[destNode]
+	    for f in transfers:
+		if transfers[f] == token:
+		    transfers[f] = newToken
+		    break
+	except Exception, e:
+	    debug("update counters failed: %s" % str(e))
+	    newToken = token
+	finally:
+	    self.lock.release()
+	return newToken
 
     def _initActiveTransfer(self, destNode):
 	if not self.activeTransfers.has_key(destNode):
@@ -505,20 +505,26 @@ class ClientThread (threading.Thread):
         debug("handleGetLocations: " + str(msg))
         assert(msg.type == Message.GET_LOCATIONS)
         requestedFile = msg.content
+        locateLimit   = int(msg.content[3])
         if not self.db.hasFile(requestedFile[0]):
             debug("file not found in db: %s" % requestedFile[0])
             self.conn.sendMessage(Message(Message.EXIT, []))
         else:
             locations = self.db.getAllLocations(requestedFile[0])
             debug("%d locations found" % len(locations))
+
+            foundCounter = 0
             for loc in locations:
                 if loc.host == self.clientName:
                     found = self.checkLocal(loc, requestedFile)
+                    foundCounter += 1
                 else:
                     found, abort = self.checkRemote(loc, requestedFile)
+                    foundCounter += 1
                     if abort:
                         debug("client died")
                         return
+                if foundCounter == locateLimit: break
             self.conn.sendMessage(Message(Message.EXIT, []))
 
     def handleRegisterCopy(self, msg):
@@ -539,8 +545,7 @@ class ClientThread (threading.Thread):
                 debug("client died")
                 self.copycount.endCopy(fileserver, self.clientName, copyToken)
             else:
-                msg = self.conn.receiveMessage()
-                debug("recv: " + str(msg))
+		msg, copyToken = self.waitForClient(fileserver, self.clientName, copyToken)
                 self.copycount.endCopy(fileserver, self.clientName, copyToken)
                 if msg == None:
                     debug("client died")
@@ -644,6 +649,21 @@ class ClientThread (threading.Thread):
         else:
             return (True, False)
 
+    def waitForClient(self, host, destNode, copyToken):
+	""" wait until the client finished copying.
+	returns (last_message, copyToken )"""
+	tokenRefreshInterval = self.config.MAX_WAIT_COPY / 2
+        msg = self.conn.receiveMessage()
+	debug("recv: " + str(msg))
+	while msg and msg.type == Message.PING:
+	    if (time.time() - copyToken) > tokenRefreshInterval:
+		# prevent token from expiring, for slow copies
+		copyToken = self.copycount.updateToken(host, destNode, copyToken)
+	    msg = self.conn.receiveMessage()
+	    debug("recv ping: " + str(msg))
+        debug("end copy: " + str(msg))
+	return (msg, copyToken)
+
     def copyFromRemote(self, loc, requestedFile):
         """ return (copyOk, wait) """
 	debug("copy from remote -> %s:%s" % (self.clientName, requestedFile[4]))
@@ -654,12 +674,7 @@ class ClientThread (threading.Thread):
             return (True, True)
         debug("start copy")
         self.conn.sendMessage(Message(Message.COPY_FROM_NODE, [ loc.host, loc.path ]))
-        msg = self.conn.receiveMessage()
-	debug("recv: " + str(msg))
-	while msg and msg.type == Message.PING:
-	    msg = self.conn.receiveMessage()
-	    debug("recv ping: " + str(msg))
-        debug("end copy: " + str(msg))
+	msg, copyToken = self.waitForClient(loc.host, self.clientName, copyToken)
         if msg == None:
             self.stat.inc("aborted")
             r = (True, False)
@@ -691,11 +706,7 @@ class ClientThread (threading.Thread):
             return (True, True)
         debug("start copy")
         self.conn.sendMessage(Message(Message.COPY_FROM_SERVER))
-        msg = self.conn.receiveMessage()
-	while msg and msg.type == Message.PING:
-	    msg = self.conn.receiveMessage()
-	    debug("recv ping: " + str(msg))
-        debug("end copy: " + str(msg))
+	msg, copyToken = self.waitForClient(fileserver, self.clientName, copyToken)
         if msg == None:
             self.stat.inc("aborted")
             r = (True, False)

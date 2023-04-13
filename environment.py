@@ -1,22 +1,3 @@
-# environment.py
-#
-# This file is part of CacheManager.
-# 
-# CacheManager is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# 
-# CacheManager is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with CacheManager. If not, see <http://www.gnu.org/licenses/>.
-#
-# Copyright 2012, RWTH Aachen University. All rights reserved.
-
 """
 environment settings for CacheManager client
 """
@@ -24,7 +5,7 @@ environment settings for CacheManager client
 import socket
 import filesystem
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 822 $"
 __author__  = "rybach@cs.rwth-aachen.de (David Rybach)"
 __copyright__ = "Copyright 2012, RWTH Aachen University"
 
@@ -39,24 +20,24 @@ class GenericClientEnvironment:
     """
 
     def server(self, config):
-	"""return the hostname of the master"""
-	return config.MASTER_HOST
+        """return the hostname of the master"""
+        return config.MASTER_HOST
 
     def cacheDir(self, config):
-	"""return the local cache directory"""
-	return config.CACHE_DIR
+        """return the local cache directory"""
+        return config.CACHE_DIR
 
     def remoteFileSystem(self, config):
-	"""return a RemoteFileSystem object to use.
+        """return a RemoteFileSystem object to use.
 
-	use filesytem.SshRemoteFileSystem if hard disks on other nodes
-	are accessible by SSH connection
+        use filesytem.SshRemoteFileSystem if hard disks on other nodes
+        are accessible by SSH connection
 
-	use filesystem.NfsRemoteFileSystem if hard disks on other nodes
-	are accessible by a network file system (e.g. NFS) and mounted
-	on the compute nodes
-	"""
-	return filesystem.SshRemoteFileSystem(config)
+        use filesystem.NfsRemoteFileSystem if hard disks on other nodes
+        are accessible by a network file system (e.g. NFS) and mounted
+        on the compute nodes
+        """
+        return filesystem.SshRemoteFileSystem(config)
 
 
 class ClientEnvironmentI6 (GenericClientEnvironment):
@@ -74,7 +55,7 @@ class ClientEnvironmentI6 (GenericClientEnvironment):
 
     def __init__(self):
         if ClientEnvironmentI6.isCluster is None:
-	    # check hostname only once
+            # check hostname only once
             ClientEnvironmentI6.isCluster = ClientEnvironmentI6._isCluster()
 
     def server(self, config):

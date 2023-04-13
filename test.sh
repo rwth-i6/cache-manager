@@ -1,29 +1,10 @@
 #!/bin/bash
-# test.sh
-#
-# This file is part of CacheManager.
-# 
-# CacheManager is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# 
-# CacheManager is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with CacheManager. If not, see <http://www.gnu.org/licenses/>.
-#
-# Copyright 2012, RWTH Aachen University. All rights reserved.
-
 # Regression tests for the CacheManager.
 # configuration has to be changed in this script
 
 # directory used for test data.
 # has to be accessible from all machines used for testing.
-DATADIR=/work/speech/rybach/temp/cm-test.$$
+DATADIR=/work/speech/golik/tmp/cm-test.$$
 mkdir -p $DATADIR
 
 # server port is chosen randomly
@@ -77,7 +58,8 @@ function cleanup()
 
 function startServer()
 {
-    cat > ${DATADIR}/server.config <<EOF
+    local config=${DATADIR}/server.config
+    cat > ${config} <<EOF
 PORT                = $SERVERPORT
 CONNECTION_QUEUE    = 32
 MAX_COPY_SERVER     = 1
@@ -90,7 +72,11 @@ MAX_WAIT_COPY       = 10*60
 CLIENT_WAIT         = 10
 CLEANUP_INTERVAL    = 10
 EOF
-    ./cm-server.py ${DATADIR}/server.config 1> ${LOGDIR}/server.log 2>> ${LOGDIR}/server.stderr &
+    while [ ! -z "$1" ]; do
+	echo $1 >> $config
+	shift 1
+    done
+    ./cm-server.py ${config} 1> ${LOGDIR}/server.log 2>> ${LOGDIR}/server.stderr &
 }
 
 function stopServer()
@@ -114,11 +100,11 @@ function clientConfig()
     local host=$(hostname)
     local clusterdir=$(echo ${CACHEDIR} | sed -e "s/$(hostname)/\$(HOST)/")
     cat > $configfile << EOF
-MASTER_HOST      = "${host}"
-MASTER_HOST = "${host}"
+MASTER_HOST_I6      = "${host}"
+MASTER_HOST_CLUSTER = "${host}"
 MASTER_PORT         = $SERVERPORT
-CACHE_DIR   = "${clusterdir}"
-CACHE_DIR        = "${CACHEDIR}"
+CACHE_DIR_CLUSTER   = "${clusterdir}"
+CACHE_DIR_I6        = "${CACHEDIR}"
 MIN_FREE            = 100 * 1024 * 1024
 MAX_USAGE           = 10
 MIN_AGE             = 24 * 60 * 60
@@ -352,6 +338,7 @@ function waitCopy()
     verify $FUNCNAME $HOST "LOG: no copy slot available. waiting" .b
     verify $FUNCNAME $HOST "LOG: copied ${DATADIR}/${FUNCNAME}" .b
 }
+
 
 function waitCopyOther()
 {
@@ -692,6 +679,32 @@ function copyToServer()
     verify $FUNCNAME $TESTHOST_A "LOG: copied ${HOST}:.*/${FUNCNAME}"
 }
 
+function copyToServerFail()
+{
+    echo "********** $FUNCNAME **********"
+    local config=$(clientConfig)
+    cp $TEST_A ${CACHEDIR}/${FUNCNAME}
+    execute $FUNCNAME $HOST "${CACHEDIR}/${FUNCNAME} ${DATADIR}/notexisting/${FUNCNAME}" $config "" "-cp" 1
+    verify $FUNCNAME $HOST "ERROR: cannot copy .*/${FUNCNAME}"
+}
+
+function copyToServerWait()
+{
+    echo "********** $FUNCNAME **********"
+    local config=$(clientConfig SLOW_COPY True SOCKET_TIMEOUT 10)
+    cp $TEST_A ${CACHEDIR}/${FUNCNAME}.a
+    cp $TEST_A ${CACHEDIR}/${FUNCNAME}.b
+    execute $FUNCNAME $HOST "${CACHEDIR}/${FUNCNAME}.a ${DATADIR}/${FUNCNAME}" $config .a "-cp" 1 &
+    pidA=$!
+    sleep 1
+    execute $FUNCNAME $HOST "${CACHEDIR}/${FUNCNAME}.b ${DATADIR}/${FUNCNAME}" $config .b "-cp" 1 &
+    pidB=$!
+    wait $pidA $pidB
+    verify $FUNCNAME $HOST "LOG: copied .*/${FUNCNAME}.a to ${DATADIR}/${FUNCNAME}" .a
+    verify $FUNCNAME $HOST "LOG: no copy slot available. wait" .b
+    verify $FUNCNAME $HOST "LOG: copied .*/${FUNCNAME}.b to ${DATADIR}/${FUNCNAME}" .b
+}
+
 function copyNoRegister()
 {
     echo "********** $FUNCNAME **********"
@@ -739,6 +752,15 @@ function copyBundleToServerWithError()
     done
 }
 
+function copyToServerOffline()
+{
+    echo "********** $FUNCNAME **********"
+    local config=$(clientConfig MASTER_HOST_I6 0.0.0.0 MASTER_HOST_CLUSTER 0.0.0.0)
+    cp $TEST_A ${CACHEDIR}/${FUNCNAME}
+    execute $FUNCNAME $HOST "${CACHEDIR}/${FUNCNAME} ${DATADIR}/${FUNCNAME}" $config "" "-cp" 1
+    verify $FUNCNAME $HOST "LOG: copied .*/${FUNCNAME} to ${DATADIR}/${FUNCNAME}"
+}
+
 
 function waitActive()
 {
@@ -755,6 +777,33 @@ function waitActive()
     verify $FUNCNAME $HOST "LOG: file transfer in progress. wait" .b
     verify $FUNCNAME $HOST "LOG: using existing file" .b
 }
+
+
+function waitActiveSlowCopy()
+{
+    echo "********** $FUNCNAME **********"
+    stopServer
+    sleep 5
+    SERVERPORT=$[10000+(${RANDOM}%1000)]
+    startServer MAX_WAIT_COPY=8 CLIENT_WAIT=2
+    createTestFile ${DATADIR}/${FUNCNAME}.a 500
+    local config=$(clientConfig SLOW_COPY True SOCKET_TIMEOUT 5)
+    cp $TEST_A ${DATADIR}/${FUNCNAME}.b
+    execute $FUNCNAME $HOST ${DATADIR}/${FUNCNAME}.a $config .a &
+    pidA=$!
+    sleep 1
+    execute $FUNCNAME $HOST ${DATADIR}/${FUNCNAME}.a $config .b &
+    pidB=$!
+    wait $pidA $pidB
+    verify $FUNCNAME $HOST "LOG: copied ${DATADIR}/${FUNCNAME}" .a
+    verify $FUNCNAME $HOST "LOG: file transfer in progress. wait" .b
+    verify $FUNCNAME $HOST "LOG: using existing file" .b
+    stopServer
+    sleep 5
+    SERVERPORT=$[10000+(${RANDOM}%1000)]
+    startServer
+}
+
 
 function waitActiveParallel()
 {
@@ -854,10 +903,14 @@ else
     locations
     locationsBundle
     copyToServer
+    copyToServerFail
+    copyToServerWait
     copyNoRegister
     copyBundleToServer
     copyBundleToServerWithError
+    copyToServerOffline
     waitActive
+    waitActiveSlowCopy
     readServerDb
 fi
 

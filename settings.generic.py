@@ -5,7 +5,7 @@ definition of configuration objects and default configuration values
 from shared import Configuration
 import environment
 
-__version__ = "$Rev: 822 $"
+__version__ = "$Rev: 826 $"
 __author__  = "rybach@cs.rwth-aachen.de (David Rybach)"
 __copyright__ = "Copyright 2012, RWTH Aachen University"
 
@@ -14,26 +14,20 @@ def clientEnvironment():
     """client environment to be used.
     see environment.py
     """
-    return environment.ClientEnvironmentI6()
+    return environment.GenericClientEnvironment()
 
 
 class ClientDefaultConfiguration (Configuration):
     """ default configuration for CacheManager clients """
 
-    """ hostname or IP of machine running the CacheManager server (environment "i6") """
-    MASTER_HOST_I6      = "www-i6"
-
-    """ hostname or IP of machine running the CacheManager server (environment "cluster") """
-    MASTER_HOST_CLUSTER = "cluster-mn-04"
+    """ hostname or IP of machine running the CacheManager server """
+    MASTER_HOST         = "master"
 
     """ port number of the CacheManager server """
     MASTER_PORT         = 10322
 
-    """ directory on local hard disks used for caching (environment "cluster") """
-    CACHE_DIR_CLUSTER   = "/var/autofs/net/$(HOST)/$(USER)"
-
     """ directory on local hard disks used for caching (environment "i6") """
-    CACHE_DIR_I6        = "/var/tmp/$(USER)"
+    CACHE_DIR           = "/var/tmp/$(USER)"
 
     """ minimum free space on cache disk (bytes) """
     MIN_FREE            = 100 * 1024 * 1024
@@ -73,22 +67,22 @@ class ServerConfiguration (Configuration):
     MAX_COPY_NODE       = 1
 
     """ database persistence file """
-    DB_FILE             = "cm-server.db"
+    DB_FILE             = "/u/rybach/temp/test.db"
 
     """ interval between database writes (seconds) """
-    DB_SAVE_INTERVAL    = 60 * 60
+    DB_SAVE_INTERVAL    = 60
 
     """ interval between statistics writes (seconds) """
-    STAT_INTERVAL       = 60 * 60
+    STAT_INTERVAL       = 10
 
     """ interval between database cleanups (seconds) """
-    CLEANUP_INTERVAL    = 60 * 60 * 24
+    CLEANUP_INTERVAL    = 60
 
     """ timeout for client sockets (seconds) """
-    SOCKET_TIMEOUT      = 30 * 60
+    SOCKET_TIMEOUT      = 30*60.0
 
     """ maximum time a client may spend copying (seconds) """
-    MAX_WAIT_COPY       = 15 * 60
+    MAX_WAIT_COPY       = 10*60
 
     """ time a client has to wait before next copy attempt (seconds) """
     CLIENT_WAIT         = 10

@@ -1,30 +1,11 @@
-# shared.py
-#
-# This file is part of CacheManager.
-# 
-# CacheManager is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# 
-# CacheManager is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with CacheManager. If not, see <http://www.gnu.org/licenses/>.
-#
-# Copyright 2012, RWTH Aachen University. All rights reserved.
-
 """
 network communication classes, configuration and auxilary functions
 for cm-client.py and cm-server.py
 """
 
-from logging import *
+from cmlogging import *
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 821 $"
 __author__  = "rybach@cs.rwth-aachen.de (David Rybach)"
 __copyright__ = "Copyright 2012, RWTH Aachen University"
 
@@ -52,7 +33,7 @@ class Message:
     IS_ACTIVE        = 18
     PING             = 19
 
-    nMessageParts = { REQUEST_FILE     : 5 ,
+    nMessageParts = { REQUEST_FILE     : 6 ,
                       CHECK_LOCAL      : 1 ,
                       CHECK_REMOTE     : 2 ,
                       FILE_OK          : 0 ,
@@ -68,9 +49,9 @@ class Message:
                       DELETED_COPY     : 4 ,
                       EXIT             : 0 ,
                       KEEP_ALIVE       : 0 ,
-                      GET_LOCATIONS    : 3 ,
-		      IS_ACTIVE        : 1 ,
-		      PING             : 0
+                      GET_LOCATIONS    : 4 ,
+                      IS_ACTIVE        : 1 ,
+                      PING             : 0
                     }
 
     def __init__(self, type, content = []):
@@ -86,7 +67,7 @@ class Connection:
 
     def __init__(self, socket, address = ""):
         self.conn = socket
-	self.address = address
+        self.address = address
 
     def __del__(self):
         self.conn.close()
@@ -97,7 +78,8 @@ class Connection:
         while size > 0:
             try:
                 buffer = self.conn.recv(size)
-            except Exception, e:
+                buffer = str(buffer.decode('ascii'))
+            except Exception as e:
                 error("cannot receive: " + str(e))
                 return None
             if buffer == None or buffer == 0 or len(buffer) == 0:
@@ -134,11 +116,15 @@ class Connection:
 
     def sendMessage(self, msg):
         # debug("send " + str(msg))
-        if self.conn.sendall(("%%0%dd" % Message.SIZE_MSG_TYPE) % msg.type) == 0:
+        mbuf = ("%%0%dd" % Message.SIZE_MSG_TYPE) % msg.type
+        mbuf = mbuf.encode('ascii')
+        if self.conn.sendall(mbuf) == 0:
             error("send message type failed")
             return False
         for m in msg.content:
             l = ("%%0%dd" % Message.SIZE_STRLEN) % len(m)
+            l = l.encode('ascii')
+            m = m.encode('ascii')
             assert(len(l) <= Message.SIZE_STRLEN)
             try:
                 if self.conn.sendall(l) == 0:
@@ -147,7 +133,7 @@ class Connection:
                 if self.conn.sendall(m) == 0:
                     error("send string failed")
                     return False
-            except Exception, e:
+            except Exception as e:
                 error("send failed: " + str(e))
                 return False
         return True
@@ -163,10 +149,10 @@ class Configuration:
 
     def read(self, filename):
         try:
-            f = file(filename, 'r')
+            f = open(filename, 'r')
         except IOError:
             return False
-        for line in f:
+        for line in f.readlines():
             l = line.strip()
             if l == "" or l[0] == "#":
                 continue
@@ -185,7 +171,7 @@ class Configuration:
 
                     setattr(self, key, v)
                     debug("set '%s' = '%s'" % (key, v))
-                except Exception, e:
+                except Exception as e:
                     error("cannot parse value '%s': %s" % (value, str(e)))
             except AttributeError:
                 error("unknown setting '%s' in '%s'" % (key, filename))

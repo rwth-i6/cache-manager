@@ -1,27 +1,7 @@
-# filesystem.py
-#
-# This file is part of CacheManager.
-# 
-# CacheManager is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-# 
-# CacheManager is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with CacheManager. If not, see <http://www.gnu.org/licenses/>.
-#
-# Copyright 2012, RWTH Aachen University. All rights reserved.
-
 """
 file system access classes for the cache manager client
 """
 
-import statvfs
 import threading
 import socket
 import os
@@ -30,10 +10,10 @@ import time
 import subprocess
 import datetime
 import signal
-from logging import *
+from cmlogging import *
 import settings
 
-__version__ = "$Rev$"
+__version__ = "$Rev: 837 $"
 __author__  = "rybach@cs.rwth-aachen.de (David Rybach)"
 __copyright__ = "Copyright 2012, RWTH Aachen University"
 
@@ -67,13 +47,13 @@ class FileSystem:
     def getFileInfo(self, filename):
         try:
             return [filename, str(int(os.path.getsize(filename))), str(int(os.path.getmtime(filename)))]
-        except Exception, e:
+        except Exception as e:
             error("cannot get file info for %s: %s" % (filename, str(e)))
             return None
 
     def getFileServer(self, filename):
         mounts = {}
-        for line in file("/proc/mounts"):
+        for line in open("/proc/mounts").readlines():
             l = line.split()
             if ":" in l[0]:
                 server = l[0].split(":")[0]
@@ -92,8 +72,8 @@ class FileSystem:
 
     def diskFree(self, dir):
         stat = os.statvfs(dir)
-        free = stat[statvfs.F_BAVAIL] * stat[statvfs.F_BSIZE]
-        total = stat[statvfs.F_BLOCKS] * stat[statvfs.F_BSIZE]
+        free = stat.f_bavail * stat.f_bsize
+        total = stat.f_blocks * stat.f_bsize
         debug("free / total: %d %d" % (free, total))
         return free, total
 
@@ -135,7 +115,7 @@ class FileSystem:
         destDir = os.path.dirname(destination)
         try:
             toFree = self.calculateSpaceToFree(filesize, destDir)
-        except Exception, e:
+        except Exception as e:
             error("cannot get disk usage: %s" % str(e))
             return (False, [])
         # TODO: return toFree
@@ -151,7 +131,7 @@ class FileSystem:
         # r = os.popen("/usr/bin/lsof -Fp %s 2> /dev/null" % filename).readlines()
         if self.lsofFailed:
             return True
-        r = _popenWithTimeout("/usr/bin/lsof -Fp %s" % filename, self.config.STAT_TIMEOUT)
+        r = _popenWithTimeout("/usr/bin/timeout -s 9 -k 10 10 /usr/bin/lsof -Fp %s" % filename, self.config.STAT_TIMEOUT)
         if r is None:
             warning("lsof %s timed out. skip further calls to lsof" % filename)
             self.lsofFailed = True
@@ -165,7 +145,7 @@ class FileSystem:
     def isFileOld(self, filename):
         try:
             age = int(time.time() - os.path.getatime(filename))
-        except Exception, e:
+        except Exception as e:
             debug("debug cannot stat %s: %s" % (filename, str(e)))
             return False
         debug("age of %s: %d => %s" % (filename, age, str(age > self.config.MIN_AGE)))
@@ -175,7 +155,7 @@ class FileSystem:
         try:
             debug("setAtime(atime=%d, mtime=%f)" % (time.time(), os.path.getmtime(filename)))
             os.utime(filename, (time.time(), os.path.getmtime(filename)))
-        except Exception, e:
+        except Exception as e:
             debug("cannot set atime of %s: %s" % (filename, str(e)))
 
     def removeOldFiles(self, spaceToFree, fileToKeep):
@@ -196,13 +176,13 @@ class FileSystem:
                     log("removed " + path)
                     debug("size = %d" % size)
                     spaceToFree -= size
-                except Exception, e:
+                except Exception as e:
                     log("cannot remove " + path)
                 if spaceToFree <= 0: break
             if spaceToFree <= 0: break
         try:
             debug("spaceToFree: %d" % int(spaceToFree))
-        except Exception, e:
+        except Exception as e:
             error("unhandled exception: spaceToFree=%s" % str(spaceToFree))
             return (False, removed)
         # TODO: send deleted files to the master
@@ -224,7 +204,7 @@ class FileSystem:
                     os.remove(destination)
                     log("removed " + destination)
                     return (False, True, True)
-                except Exception, e:
+                except Exception as e:
                     error("cannot remove existing file: %s" % str(e))
                     return (False, False, False)
             else:
@@ -252,165 +232,173 @@ class RemoteFileSystem:
                 if self.isFile:
                     self.fileSize = int(os.path.getsize(self.filename))
                     self.mTime = int(os.path.getmtime(self.filename))
-            except Exception, e:
+            except Exception as e:
                 debug("error StatThread: %s" % filename)
 
     def __init__(self, config):
         self.config = config
 
     def isHostAlive(self, host):
-	try:
-	    devNull = open("/dev/null", "w")
-	    debug("sending ping to %s" % host)
-	    r = subprocess.call(["/bin/ping","-c 1", "-w 1", host],
-		    shell=False, stdout=devNull, stderr=devNull)
-	except Exception, e:
-	    debug("exception in ping: %s" % str(e))
-	    return True
-	devNull.close()
-	return r == 0
+        try:
+            devNull = open("/dev/null", "w")
+            debug("sending ping to %s" % host)
+            r = subprocess.call(["/bin/ping","-c 1", "-w 1", host],
+                    shell=False, stdout=devNull, stderr=devNull)
+        except Exception as e:
+            debug("exception in ping: %s" % str(e))
+            return True
+        devNull.close()
+        return r == 0
 
 
     def getFileStat(self, host, filename):
-	# virtual method
-	pass
+        # virtual method
+        pass
 
     def execWithFlock(self, file, cmd):
-	execCmd = '/usr/bin/flock -e -n %s -c "%s" 2>&1' % (file, cmd)
-	debug(execCmd)
-	msg = ""
-	r = False
-	try:
-	    fd = os.popen(execCmd)
-	    msg = fd.read()
-	    r = (fd.close() is None)
-	except Exception, e:
-	    msg = "copy failed: str(e)"
-	debug("r=%s, msg=%s" % (str(r), msg))
-	return (r, msg)
+        execCmd = '/usr/bin/flock -e -n %s -c "%s" 2>&1' % (file, cmd)
+        debug(execCmd)
+        msg = ""
+        r = False
+        try:
+            fd = os.popen(execCmd)
+            msg = fd.read()
+            r = (fd.close() is None)
+        except Exception as e:
+            msg = "copy failed: str(e)"
+        debug("r=%s, msg=%s" % (str(r), msg))
+        return (r, msg)
 
     def copyFile(self, host, source, destination):
-	# virtual method
-	pass
+        # virtual method
+        pass
 
     def copyUsingCp(self, source, destination):
-	""" cp -p doesn't handle ACLs correctly
-	    therefore we set the mode using chmod. """
-	cmd = '/bin/cp --preserve=ownership,timestamps "%s" "%s"' % (source, destination)
-	r = self.execWithFlock(destination, cmd)
-	cmd = '/bin/chmod -f --reference="%s" "%s"' % (source, destination)
-	debug(cmd)
-	try:
-    	    os.system(cmd)
-	except Exception, e:
-	    debug(str(e))
-	if self.config.SLOW_COPY:
-	    time.sleep(10)
-	return r
+        """ cp -p doesn't handle ACLs correctly
+            therefore we set the mode using chmod. """
+        cmd = '/bin/cp --preserve=ownership,timestamps "%s" "%s"' % (source, destination)
+        r = self.execWithFlock(destination, cmd)
+        cmd = '/bin/chmod -f --reference="%s" "%s"' % (source, destination)
+        debug(cmd)
+        try:
+                os.system(cmd)
+        except Exception as e:
+            debug(str(e))
+        if self.config.SLOW_COPY:
+            time.sleep(10)
+        return r
 
     def brandFile(self, host, filename):
-	# virtual method
-	pass
+        # virtual method
+        pass
 
 class NfsRemoteFileSystem (RemoteFileSystem):
 
     def getFileStat(self, host, filename):
-	if not self.isHostAlive(host):
-	    return None
-	st = self.StatThread(filename)
-	st.setDaemon(True)
-	st.start()
-	st.join(self.config.STAT_TIMEOUT)
-	if st.isAlive():
-	    warning("stat of %s timed out" % filename)
-	    r = None
-	elif not st.isFile:
-	    r = None
-	else:
-	    r = (st.fileSize, st.mTime)
-	del st
-	return r
+        if not self.isHostAlive(host):
+            return None
+        st = self.StatThread(filename)
+        st.setDaemon(True)
+        st.start()
+        st.join(self.config.STAT_TIMEOUT)
+        if st.isAlive():
+            warning("stat of %s timed out" % filename)
+            r = None
+        elif not st.isFile:
+            r = None
+        else:
+            r = (st.fileSize, st.mTime)
+        del st
+        return r
 
     def brandFile(self, host, filename):
-	try:
-	    debug("setAtime(atime=%d, mtime=%f)" % (time.time(), os.path.getmtime(filename)))
-	    os.utime(filename, (time.time(), os.path.getmtime(filename)))
-	except Exception, e:
-	    debug("cannot set atime of %s: %s" % (filename, str(e)))
+        try:
+            debug("setAtime(atime=%d, mtime=%f)" % (time.time(), os.path.getmtime(filename)))
+            os.utime(filename, (time.time(), os.path.getmtime(filename)))
+        except Exception as e:
+            debug("cannot set atime of %s: %s" % (filename, str(e)))
 
 
     def copyFile(self, host, source, destination):
-	return self.copyUsingCp(source, destination)
+        return self.copyUsingCp(source, destination)
 
 
 class SshRemoteFileSystem (RemoteFileSystem):
 
     SSH_SOCKET = "/tmp/cf_%d_ssh_%%r_%%h_%%p" % os.getpid()
 
+    # changed arcfour256 to aes256-ctr (2017/01 pg)
     SSH_OPT = "-o PubkeyAuthentication=yes -o PasswordAuthentication=no " \
-              "-o BatchMode=yes -o CheckHostIP=no -o LogLevel=quiet -c arcfour256 " \
-	      "-o ControlPath=" + SSH_SOCKET
+              "-o BatchMode=yes -o CheckHostIP=no -o LogLevel=quiet -c aes256-ctr " \
+              "-o StrictHostKeyChecking=no " \
+              "-o ControlPath=%s -o ConnectTimeout=7 " % (SSH_SOCKET)
 
     SCP_OPT = SSH_OPT + " -p -q -B"
 
+    MAX_CONN = 5
+    # @todo: add client parameter
+
 
     def __init__(self, config):
-	RemoteFileSystem.__init__(self, config)
-	self.connections = {}
+        RemoteFileSystem.__init__(self, config)
+        self.connections = {}
 
     def connectHost(self, host):
-	if not host in self.connections:
-	    self.connections[host] = SshMasterConnection(host)
+        if not host in self.connections:
+            if len(self.connections) >= self.MAX_CONN:
+                # too many open ssh connects, close all
+                self.connections = {}
+            self.connections[host] = SshMasterConnection(host)
 
     def getFileStat(self, host, filename):
-	if not self.isHostAlive(host):
-	    return None
-	self.connectHost(host)
-	cmd =  "/usr/bin/ssh -x %s %s " % (self.SSH_OPT, host)
-	cmd += "'/usr/bin/stat --format=\"%%s %%Y\" %s 2>/dev/null'" % filename
-	debug(cmd)
-	b = os.popen(cmd).readlines()
-	if len(b) == 0:
-	    log("cannot get stat of %s:%s" % (host, filename))
-	    return None
-	else:
-	    b = b[0].split()
-	    return (int(b[0]), int(b[1]))
+        if not self.isHostAlive(host):
+            return None
+        self.connectHost(host)
+        cmd =  "/usr/bin/ssh -n -x %s %s " % (self.SSH_OPT, host)
+        cmd += "'/usr/bin/stat --format=\"%%s %%Y\" %s 2>/dev/null'" % filename
+        debug(cmd)
+        b = os.popen(cmd).readlines()
+        if len(b) == 0:
+            log("cannot get stat of %s:%s" % (host, filename))
+            return None
+        else:
+            b = b[0].split()
+            return (int(b[0]), int(b[1]))
 
     def brandFile(self, host, filename):
-	self.connectHost(host)
-	cmd =  "/usr/bin/ssh -x %s %s " % (self.SSH_OPT, host)
-	cmd += "'/usr/bin/touch -a %s 2>/dev/null'" % filename
-	debug(cmd)
-	try:
-	    os.popen(cmd)
-	except Exception, e:
-	    debug("cannot set atime of %s over ssh: %s" % (filename, str(e)))
+        self.connectHost(host)
+        cmd =  "/usr/bin/ssh -n -x %s %s " % (self.SSH_OPT, host)
+        cmd += "'/usr/bin/touch -a %s 2>/dev/null'" % filename
+        debug(cmd)
+        try:
+            os.popen(cmd)
+        except Exception as e:
+            debug("cannot set atime of %s over ssh: %s" % (filename, str(e)))
 
     def copyFile(self, host, source, destination):
-	self.connectHost(host)
+        self.connectHost(host)
         cmd = "/usr/bin/scp %s %s:%s %s" % (self.SCP_OPT, host, source, destination)
-	r = self.execWithFlock(destination, cmd)
-	if self.config.SLOW_COPY:
-	    time.sleep(10)
-	return r
+        r = self.execWithFlock(destination, cmd)
+        if self.config.SLOW_COPY:
+            time.sleep(10)
+        return r
 
 class SshMasterConnection:
     SSH_MASTER = [ "/usr/bin/ssh", "-M", "-N" ] + SshRemoteFileSystem.SSH_OPT.split()
     def __init__(self, host):
-	try:
-	    debug(" ".join(self.SSH_MASTER))
-	    self.process = subprocess.Popen(self.SSH_MASTER + [ host ], shell=False,
-		    stdout=subprocess.PIPE)
-	except Exception, e:
-	    debug("ssh master failed: " + str(e))
-	    self.process = None
+        try:
+            debug(" ".join(self.SSH_MASTER))
+            self.process = subprocess.Popen(self.SSH_MASTER + [ host ], shell=False,
+                    stdout=subprocess.PIPE)
+        except Exception as e:
+            debug("ssh master failed: " + str(e))
+            self.process = None
 
     def __del__(self):
-	try:
-	    if self.process:
-		debug("terminating master connection: " + str(self.process.pid))
-		os.kill(self.process.pid, signal.SIGTERM)
-	except Exception, e:
-	    debug("connection termination failed: " + str(e))
+        try:
+            if self.process:
+                debug("terminating master connection: " + str(self.process.pid))
+                os.kill(self.process.pid, signal.SIGTERM)
+        except Exception as e:
+            debug("connection termination failed: " + str(e))
 
