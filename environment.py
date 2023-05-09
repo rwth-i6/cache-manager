@@ -75,6 +75,6 @@ class ClientEnvironmentI6 (GenericClientEnvironment):
     @staticmethod
     def _isCluster():
         hostname = socket.gethostname()
-        return (hostname[0:10] == "cluster-cn")
+        return (hostname[0:10] == "cluster-cn" or hostname[:3] == "cn-")
 
 
