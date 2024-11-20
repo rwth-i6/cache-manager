@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 cache management server
 supervises load balanced file caching on local harddisks
@@ -9,7 +9,7 @@ import socket
 import threading
 import copy
 import time
-import cPickle as cpickle
+import pickle as cpickle
 import random
 import signal
 import gzip
@@ -70,7 +70,7 @@ class CopyCounter:
             i[0] -= 1
             i[1].append(token)
             r = token
-            if (self.activeTransfers[destNode].has_key(file)):
+            if (file in self.activeTransfers[destNode]):
                 error("copy constrained violated: %s %s %s" % (destNode, file, str(token)))
             self.activeTransfers[destNode][file] = token
         debug("end startCopy: => %s" % str(r))
@@ -180,7 +180,7 @@ class CopyCounter:
                 if transfers[f] == token:
                     transfers[f] = newToken
                     break
-        except Exception, e:
+        except Exception as e:
             debug("update counters failed: %s" % str(e))
             newToken = token
         finally:
@@ -188,11 +188,11 @@ class CopyCounter:
         return newToken
 
     def _initActiveTransfer(self, destNode):
-        if not self.activeTransfers.has_key(destNode):
+        if not destNode in self.activeTransfers:
             self.activeTransfers[destNode] = {}
 
     def _initCounter(self, host, destNode, maxCopy):
-        if not self.counters.has_key(host):
+        if not host in self.counters:
             self.counters[host] = [maxCopy, [] ]
 
 
@@ -251,7 +251,7 @@ class FileDatabase:
 
     def hasFile(self, filename):
         self.lock.acquire()
-        r = self.files.has_key(filename)
+        r = (filename in self.files)
         self.lock.release()
         return r
 
@@ -261,7 +261,7 @@ class FileDatabase:
     def getLocation(self, filename, preferedHost = "", counter = None):
         r = None
         self.lock.acquire()
-        if not self.files.has_key(filename):
+        if not filename in self.files:
             self.lock.release()
             return None
         record = self.files[filename]
@@ -287,7 +287,7 @@ class FileDatabase:
     def getAllLocations(self, filename):
         r = []
         self.lock.acquire()
-        if (not self.files.has_key(filename)) or (len(self.files[filename]) == 0):
+        if (not filename in self.files) or (len(self.files[filename]) == 0):
             self.lock.release()
             return r
         r = self.files[filename]
@@ -298,7 +298,7 @@ class FileDatabase:
     def addLocation(self, filename, location):
         debug("addLocation: %s %s" % (filename, str(location)))
         self.lock.acquire()
-        if not self.files.has_key(filename):
+        if not filename in self.files:
             self.files[filename] = FileDatabaseRecord([], int(time.time()))
         if not location in self.files[filename]:
             self.files[filename].append(location)
@@ -309,7 +309,7 @@ class FileDatabase:
     def removeLocation(self, filename, location):
         debug("removeLocation: %s %s" % (filename, str(location)))
         self.lock.acquire()
-        if self.files.has_key(filename):
+        if filename in self.files:
             try:
                 self.files[filename].remove(location)
             except ValueError: pass
@@ -354,7 +354,7 @@ class FileDatabase:
             except IOError:
                 debug("loadCompressed failed")
                 db = self.loadPlain(filename)
-        except Exception, e:
+        except Exception as e:
             warning("cannot open database file %s: %s" % (filename, str(e)))
         if not db:
             return False
@@ -405,10 +405,10 @@ class DatabaseWriter (threading.Thread):
         threading.Thread.__init__(self)
 
     def run(self):
-        while not self.finished.isSet():
+        while not self.finished.is_set():
             try:
                 self.db.write(self.dbFile)
-            except Exception, e:
+            except Exception as e:
                 log("error writing database to %s: %s" % (self.dbFile, str(e)))
             self.finished.wait(self.saveInterval)
 
@@ -779,7 +779,7 @@ class StatisticsWriter (threading.Thread):
         self.finished = threading.Event()
 
     def run(self):
-        while not self.finished.isSet():
+        while not self.finished.is_set():
             if self.stat.hasChanged():
                 stat = self.stat.get()
                 db   = self.db.getStat()
@@ -816,7 +816,7 @@ class DatabaseCleaner (threading.Thread):
         self.finished = threading.Event()
 
     def run(self):
-        while not self.finished.isSet():
+        while not self.finished.is_set():
             self.db.removeOldRecords(int(time.time()) - self.maxAge)
             self.finished.wait(self.interval)
 
@@ -848,7 +848,7 @@ def main(argc, argv):
         serverSocket.bind(('', config.PORT))
         serverSocket.listen(config.CONNECTION_QUEUE)
         log("listening on port: %d" % config.PORT)
-    except Exception, e:
+    except Exception as e:
         error("cannot create server socket: %s" % str(e))
         return 1
     filedb = FileDatabase()
@@ -872,7 +872,7 @@ def main(argc, argv):
                 clientSocket = None
                 try:
                         clientSocket, clientAddress = serverSocket.accept()
-                except Exception, e:
+                except Exception as e:
                     error("socket accept failed: %s" % str(e))
                     del clientSocket
                     startClientThread = False
@@ -890,7 +890,7 @@ def main(argc, argv):
                 filedb.lock.release()
                 filedb.write(config.DB_FILE)
             log("exit")
-    except (SignalException, KeyboardInterrupt), e:
+    except (SignalException, KeyboardInterrupt) as e:
         debug("Interrupt: %s" % str(e))
         pass
     return 0
