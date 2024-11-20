@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 cache management server
 supervises load balanced file caching on local harddisks
@@ -22,7 +22,7 @@ __copyright__ = "Copyright 2012, RWTH Aachen University"
 
 class ServerConfiguration (Configuration):
     # master port
-    PORT                = 10322
+    PORT                = 10321
     # queue of the server socket
     CONNECTION_QUEUE    = 32
     # maximum number of parallel transfers from/to file servers
@@ -44,7 +44,8 @@ class ServerConfiguration (Configuration):
     # time a client has to wait before next copy attempt (seconds)
     CLIENT_WAIT         = 10
     # time after a record in the database is deleted (seconds)
-    MAX_AGE             = 60 * 60 * 24 * 14
+    # this number should be synchronized with the interval of /etc/cron.daily/cleanuptmp
+    MAX_AGE             = 60 * 60 * 24 * 7
 
 
 class CopyCounter:
@@ -52,26 +53,26 @@ class CopyCounter:
     def __init__(self, config):
         self.config = config
         self.counters = {}
-	self.activeTransfers = {}
+        self.activeTransfers = {}
         self.lock = threading.Lock()
 
     def _startCopy(self, host, destNode, file):
         i = self.counters[host]
         debug(str(i))
         self._cleanup(i)
-	self._cleanupActiveTransfers(destNode, False)
+        self._cleanupActiveTransfers(destNode, False)
         if i[0] <= 0:
             r = 0
-	elif destNode in self.activeTransfers and file in self.activeTransfers[destNode]:
-	    r = 0
+        elif destNode in self.activeTransfers and file in self.activeTransfers[destNode]:
+            r = 0
         else:
             token = int(time.time())
             i[0] -= 1
             i[1].append(token)
             r = token
-	    if (self.activeTransfers[destNode].has_key(file)):
-		error("copy constrained violated: %s %s %s" % (destNode, file, str(token)))
-	    self.activeTransfers[destNode][file] = token
+            if (self.activeTransfers[destNode].has_key(file)):
+                error("copy constrained violated: %s %s %s" % (destNode, file, str(token)))
+            self.activeTransfers[destNode][file] = token
         debug("end startCopy: => %s" % str(r))
         return r
 
@@ -87,108 +88,108 @@ class CopyCounter:
         item[1] = new
 
     def _cleanupActiveTransfers(self, destNode, removeNode):
-	if not destNode in self.activeTransfers:
-	    return
-	curTime = time.time()
-	try:
-	    transfers = self.activeTransfers[destNode]
-	    keys = transfers.keys()
-	    for f in keys:
-		if curTime - transfers[f] > self.config.MAX_WAIT_COPY:
-		    del transfers[f]
-	    if removeNode and not transfers:
-		del self.activeTransfers[destNode]
-	except KeyError: pass
+        if not destNode in self.activeTransfers:
+            return
+        curTime = time.time()
+        try:
+            transfers = self.activeTransfers[destNode]
+            keys = transfers.keys()
+            for f in keys:
+                if curTime - transfers[f] > self.config.MAX_WAIT_COPY:
+                    del transfers[f]
+            if removeNode and not transfers:
+                del self.activeTransfers[destNode]
+        except KeyError: pass
 
     def hasAvailableSlots(self, host):
-	self.lock.acquire()
-	try:
-	    r = True
-	    if host in self.counters and self.counters[host][0] <= 0:
-		r = False
-	finally:
-	    self.lock.release()
-	return r
+        self.lock.acquire()
+        try:
+            r = True
+            if host in self.counters and self.counters[host][0] <= 0:
+                r = False
+        finally:
+            self.lock.release()
+        return r
 
     def isActiveTransfer(self, destNode, file):
-	self.lock.acquire()
-	try:
-	    self._initActiveTransfer(destNode)
-	    self._cleanupActiveTransfers(destNode, True)
-	    r = False
-	    if (destNode in self.activeTransfers) and (file in self.activeTransfers[destNode]):
-		r = True
-	finally:
-	    self.lock.release()
-	debug("isActiveTransfer %s %s %s" % (destNode, file, str(r)))
-	return r
+        self.lock.acquire()
+        try:
+            self._initActiveTransfer(destNode)
+            self._cleanupActiveTransfers(destNode, True)
+            r = False
+            if (destNode in self.activeTransfers) and (file in self.activeTransfers[destNode]):
+                r = True
+        finally:
+            self.lock.release()
+        debug("isActiveTransfer %s %s %s" % (destNode, file, str(r)))
+        return r
 
     def startCopyFromNode(self, host, destNode, file):
         self.lock.acquire()
-	try:
-	    self._initCounter(host, destNode, self.config.MAX_COPY_NODE)
-	    self._initActiveTransfer(destNode)
-	    r = self._startCopy(host, destNode, file)
-	finally:
-    	    self.lock.release()
-	return r
+        try:
+            self._initCounter(host, destNode, self.config.MAX_COPY_NODE)
+            self._initActiveTransfer(destNode)
+            r = self._startCopy(host, destNode, file)
+        finally:
+                self.lock.release()
+        return r
 
     def startCopyFromServer(self, host, destNode, file):
         self.lock.acquire()
-	try:
-	    self._initCounter(host, destNode, self.config.MAX_COPY_SERVER)
-	    self._initActiveTransfer(destNode)
-	    r = self._startCopy(host, destNode, file)
-	finally:
-	    self.lock.release()
-	return r
+        try:
+            self._initCounter(host, destNode, self.config.MAX_COPY_SERVER)
+            self._initActiveTransfer(destNode)
+            r = self._startCopy(host, destNode, file)
+        finally:
+            self.lock.release()
+        return r
 
     def endCopy(self, host, destNode, token):
         debug("endCopy: %s %s %d" % (host, destNode, token))
         self.lock.acquire()
-	try:
-	    self.counters[host][0] += 1
-	    try:
-		self.counters[host][1].remove(token)
-	    except ValueError: pass
-	    debug(str(self.counters[host]))
-	    try:
-		transfers = self.activeTransfers[destNode]
-		toDelete = []
-		for f in transfers:
-		    if transfers[f] == token:
-			toDelete.append(f)
-		for f in toDelete:
-		    del transfers[f]
-		# debug("transfers[%s]: %s" % (destNode, str(transfers)))
-		if not transfers:
-		    del self.activeTransfers[destNode]
-	    except KeyError: pass
-	finally:
-	    self.lock.release()
+        try:
+            self.counters[host][0] += 1
+            try:
+                self.counters[host][1].remove(token)
+            except ValueError: pass
+            debug(str(self.counters[host]))
+            try:
+                transfers = self.activeTransfers[destNode]
+                toDelete = []
+                for f in transfers:
+                    if transfers[f] == token:
+                        toDelete.append(f)
+                for f in toDelete:
+                    del transfers[f]
+                # debug("transfers[%s]: %s" % (destNode, str(transfers)))
+                if not transfers:
+                    del self.activeTransfers[destNode]
+            except KeyError: pass
+        finally:
+            self.lock.release()
 
     def updateToken(self, host, destNode, token):
-	debug("updateToken: %s %s %s" % (host, destNode, str(token)))
-	self.lock.acquire()
-	newToken = int(time.time())
-	try:
-	    self.counters[host][1].remove(token)
-	    self.counters[host][1].append(newToken)
-	    transfers = self.activeTransfers[destNode]
-	    for f in transfers:
-		if transfers[f] == token:
-		    transfers[f] = newToken
-		    break
-	except Exception, e:
-	    debug("update counters failed: %s" % str(e))
-	    newToken = token
-	finally:
-	    self.lock.release()
-	return newToken
+        debug("updateToken: %s %s %s" % (host, destNode, str(token)))
+        self.lock.acquire()
+        newToken = int(time.time())
+        try:
+            self.counters[host][1].remove(token)
+            self.counters[host][1].append(newToken)
+            transfers = self.activeTransfers[destNode]
+            for f in transfers:
+                if transfers[f] == token:
+                    transfers[f] = newToken
+                    break
+        except Exception, e:
+            debug("update counters failed: %s" % str(e))
+            newToken = token
+        finally:
+            self.lock.release()
+        return newToken
 
     def _initActiveTransfer(self, destNode):
-	if not self.activeTransfers.has_key(destNode):
-	    self.activeTransfers[destNode] = {}
+        if not self.activeTransfers.has_key(destNode):
+            self.activeTransfers[destNode] = {}
 
     def _initCounter(self, host, destNode, maxCopy):
         if not self.counters.has_key(host):
@@ -263,22 +264,22 @@ class FileDatabase:
         if not self.files.has_key(filename):
             self.lock.release()
             return None
-	record = self.files[filename]
+        record = self.files[filename]
         nFiles = len(record)
         if nFiles == 0:
             self.lock.release()
             return None
         if preferedHost != "":
-	    for l in record:
+            for l in record:
                 if l.host == preferedHost:
                     r = l
         if r == None:
-	    if counter and nFiles > 1:
-		locList = filter(lambda l: counter.hasAvailableSlots(l.host), record)
-		if locList:
-		    r = locList[random.randint(0, len(locList)-1)]
-	if r == None:
-	    r = record[random.randint(0, nFiles-1)]
+            if counter and nFiles > 1:
+                locList = filter(lambda l: counter.hasAvailableSlots(l.host), record)
+                if locList:
+                    r = locList[random.randint(0, len(locList)-1)]
+        if r == None:
+            r = record[random.randint(0, nFiles-1)]
         record.access()
         self.lock.release()
         return r
@@ -322,51 +323,51 @@ class FileDatabase:
         if not self.changed:
             self.lock.release()
             return True
-	# pickle a copy of the actual data such
-	# that the lock is released early
-	dbcopy = copy.copy(self.files)
-	self.lock.release()
+        # pickle a copy of the actual data such
+        # that the lock is released early
+        dbcopy = copy.copy(self.files)
+        self.lock.release()
         f = gzip.open(filename, 'wb')
         if not f:
             return False
         try:
             cpickle.dump(dbcopy, f)
-	    debug("wrote database. %d files" % len(dbcopy))
+            debug("wrote database. %d files" % len(dbcopy))
             self.changed = False
-	except Exception:
-	    return False
-	return True
+        except Exception:
+            return False
+        return True
 
     def loadPlain(self, filename):
-	fd = open(filename, 'rb')
-	return cpickle.load(fd)
+        fd = open(filename, 'rb')
+        return cpickle.load(fd)
 
     def loadCompressed(self, filename):
-	fd = gzip.open(filename, 'rb')
-	return cpickle.load(fd)
+        fd = gzip.open(filename, 'rb')
+        return cpickle.load(fd)
 
     def load(self, filename):
-	db = None
-	try:
-	    try:
-		db = self.loadCompressed(filename)
-	    except IOError:
-		debug("loadCompressed failed")
-		db = self.loadPlain(filename)
-	except Exception, e:
-	    warning("cannot open database file %s: %s" % (filename, str(e)))
-	if not db:
-	    return False
+        db = None
+        try:
+            try:
+                db = self.loadCompressed(filename)
+            except IOError:
+                debug("loadCompressed failed")
+                db = self.loadPlain(filename)
+        except Exception, e:
+            warning("cannot open database file %s: %s" % (filename, str(e)))
+        if not db:
+            return False
         self.lock.acquire()
-	self.files = db
-	converted = False
-	for f in self.files.keys():
-	    if type(self.files[f]) == list:
-		self.files[f] = FileDatabaseRecord(self.files[f])
-		converted = True
-	if converted:
-	    log("converted database")
-	debug("%d files" % len(self.files))
+        self.files = db
+        converted = False
+        for f in self.files.keys():
+            if type(self.files[f]) == list:
+                self.files[f] = FileDatabaseRecord(self.files[f])
+                converted = True
+        if converted:
+            log("converted database")
+        debug("%d files" % len(self.files))
         self.lock.release()
         return True
 
@@ -458,9 +459,9 @@ class ClientThread (threading.Thread):
                 elif msg.type == Message.DELETED_COPY:
                     self.handleDeletedFile(msg)
                     disconnect = False
-		elif msg.type == Message.IS_ACTIVE:
-		    self.handleIsActive(msg)
-		    disconnect = False
+                elif msg.type == Message.IS_ACTIVE:
+                    self.handleIsActive(msg)
+                    disconnect = False
                 elif msg.type == Message.KEEP_ALIVE:
                     keepAlive = True
                     disconnect = False
@@ -485,15 +486,15 @@ class ClientThread (threading.Thread):
         self.db.addLocation(msg.content[0], newloc)
 
     def handleIsActive(self, msg):
-	debug("handleIsActive: " + str(msg))
-	assert(msg.type == Message.IS_ACTIVE)
-	dest = msg.content[0]
-	if self.copycount.isActiveTransfer(self.clientName, dest):
-	    reply = Message(Message.WAIT, [ str(self.config.CLIENT_WAIT) ])
-	else:
-	    reply = Message(Message.FILE_OK)
-	if not self.conn.sendMessage(reply):
-	    debug("client died")
+        debug("handleIsActive: " + str(msg))
+        assert(msg.type == Message.IS_ACTIVE)
+        dest = msg.content[0]
+        if self.copycount.isActiveTransfer(self.clientName, dest):
+            reply = Message(Message.WAIT, [ str(self.config.CLIENT_WAIT) ])
+        else:
+            reply = Message(Message.FILE_OK)
+        if not self.conn.sendMessage(reply):
+            debug("client died")
 
     def handleDeletedFile(self, msg):
         debug("handleDeletedFile: " + str(msg))
@@ -545,7 +546,7 @@ class ClientThread (threading.Thread):
                 debug("client died")
                 self.copycount.endCopy(fileserver, self.clientName, copyToken)
             else:
-		msg, copyToken = self.waitForClient(fileserver, self.clientName, copyToken)
+                msg, copyToken = self.waitForClient(fileserver, self.clientName, copyToken)
                 self.copycount.endCopy(fileserver, self.clientName, copyToken)
                 if msg == None:
                     debug("client died")
@@ -561,18 +562,19 @@ class ClientThread (threading.Thread):
         debug("handleFileRequest: " + str(msg))
         assert(msg.type == Message.REQUEST_FILE)
         requestedFile = msg.content
-	localDestination = requestedFile[4]
+        localDestination = requestedFile[4]
+        locateLimit = int(requestedFile[5])
         found = False
         wait  = False
-	forceWait = False
-        while True:
+        forceWait = False
+        while True and locateLimit > 0:
             loc = self.findLocation(requestedFile)
             debug("loc: " + str(loc))
-	    if self.copycount.isActiveTransfer(self.clientName, localDestination):
-		debug("currently active transfer. send wait")
-		forceWait = wait = True
-	    elif loc != None:
-		forceWait = False
+            if self.copycount.isActiveTransfer(self.clientName, localDestination):
+                debug("currently active transfer. send wait")
+                forceWait = wait = True
+            elif loc != None:
+                forceWait = False
                 if loc.host == self.clientName:
                     found = self.checkLocal(loc, requestedFile)
                 else:
@@ -580,8 +582,10 @@ class ClientThread (threading.Thread):
                     debug("checkRemote -> found=%s, abort=%s" % (found, abort))
                     if not abort and found:
                         found, wait = self.copyFromRemote(loc, requestedFile)
+                    locateLimit -= 1
+                    debug("locateLimit=%d (=retries left)" %locateLimit)
             else:
-		forceWait = False
+                forceWait = False
                 break
             debug("found: " + str(found))
             debug("wait:  " + str(wait))
@@ -589,11 +593,11 @@ class ClientThread (threading.Thread):
         if (not found) or wait:
             # if file was not found on a node or if we would have to wait for it,
             # check if we can get it without waiting from the server
-	    if not forceWait:
-		found, wait = self.copyFromOrigin(requestedFile)
-		if not found:
-		    log("copyFromOrigin failed: " + requestedFile[0])
-		    self.conn.sendMessage(Message(Message.FALLBACK))
+            if not forceWait:
+                found, wait = self.copyFromOrigin(requestedFile)
+                if not found:
+                    log("copyFromOrigin failed: " + requestedFile[0])
+                    self.conn.sendMessage(Message(Message.FALLBACK))
             if wait:
                 debug("send wait")
                 self.conn.sendMessage(Message(Message.WAIT, [ str(self.config.CLIENT_WAIT) ] ))
@@ -650,23 +654,23 @@ class ClientThread (threading.Thread):
             return (True, False)
 
     def waitForClient(self, host, destNode, copyToken):
-	""" wait until the client finished copying.
-	returns (last_message, copyToken )"""
-	tokenRefreshInterval = self.config.MAX_WAIT_COPY / 2
+        """ wait until the client finished copying.
+        returns (last_message, copyToken )"""
+        tokenRefreshInterval = self.config.MAX_WAIT_COPY / 2
         msg = self.conn.receiveMessage()
-	debug("recv: " + str(msg))
-	while msg and msg.type == Message.PING:
-	    if (time.time() - copyToken) > tokenRefreshInterval:
-		# prevent token from expiring, for slow copies
-		copyToken = self.copycount.updateToken(host, destNode, copyToken)
-	    msg = self.conn.receiveMessage()
-	    debug("recv ping: " + str(msg))
+        debug("recv: " + str(msg))
+        while msg and msg.type == Message.PING:
+            if (time.time() - copyToken) > tokenRefreshInterval:
+                # prevent token from expiring, for slow copies
+                copyToken = self.copycount.updateToken(host, destNode, copyToken)
+            msg = self.conn.receiveMessage()
+            debug("recv ping: " + str(msg))
         debug("end copy: " + str(msg))
-	return (msg, copyToken)
+        return (msg, copyToken)
 
     def copyFromRemote(self, loc, requestedFile):
         """ return (copyOk, wait) """
-	debug("copy from remote -> %s:%s" % (self.clientName, requestedFile[4]))
+        debug("copy from remote -> %s:%s" % (self.clientName, requestedFile[4]))
         cnt = 0
         copyToken = self.copycount.startCopyFromNode(loc.host, self.clientName, requestedFile[4])
         if copyToken == 0:
@@ -674,7 +678,7 @@ class ClientThread (threading.Thread):
             return (True, True)
         debug("start copy")
         self.conn.sendMessage(Message(Message.COPY_FROM_NODE, [ loc.host, loc.path ]))
-	msg, copyToken = self.waitForClient(loc.host, self.clientName, copyToken)
+        msg, copyToken = self.waitForClient(loc.host, self.clientName, copyToken)
         if msg == None:
             self.stat.inc("aborted")
             r = (True, False)
@@ -693,10 +697,10 @@ class ClientThread (threading.Thread):
             self.db.removeLocation(requestedFile[0], loc)
             r = (False, False)
         self.copycount.endCopy(loc.host, self.clientName, copyToken)
-	return r
+        return r
 
     def copyFromOrigin(self, requestedFile):
-	debug("copy from origin -> %s:%s" % (self.clientName, requestedFile[4]))
+        debug("copy from origin -> %s:%s" % (self.clientName, requestedFile[4]))
         cnt = 0
         fileserver = requestedFile[3]
         if fileserver == "": fileserver = "unknown"
@@ -706,7 +710,7 @@ class ClientThread (threading.Thread):
             return (True, True)
         debug("start copy")
         self.conn.sendMessage(Message(Message.COPY_FROM_SERVER))
-	msg, copyToken = self.waitForClient(fileserver, self.clientName, copyToken)
+        msg, copyToken = self.waitForClient(fileserver, self.clientName, copyToken)
         if msg == None:
             self.stat.inc("aborted")
             r = (True, False)
@@ -718,11 +722,11 @@ class ClientThread (threading.Thread):
             r = (True, False)
         else:
             r = (False, False)
-	# release lock on local copy _after_ adding the new location to the DB
-	# such that parallel running clients on the same node use the existing
-	# copy from now on
+        # release lock on local copy _after_ adding the new location to the DB
+        # such that parallel running clients on the same node use the existing
+        # copy from now on
         self.copycount.endCopy(fileserver, self.clientName, copyToken)
-	return r
+        return r
 
 
 class Statistics:
@@ -864,19 +868,19 @@ def main(argc, argv):
             dbCleaner.start()
             statWriter.start()
             while True:
-		startClientThread = True
-		clientSocket = None
-		try:
-    		    clientSocket, clientAddress = serverSocket.accept()
-		except Exception, e:
-		    error("socket accept failed: %s" % str(e))
-		    del clientSocket
-		    startClientThread = False
-		if startClientThread:
-		    clientSocket.settimeout(config.SOCKET_TIMEOUT)
-		    clientConnection = Connection(clientSocket, clientAddress)
-		    clientThread = ClientThread(config, clientConnection, clientAddress, filedb, copycount, stat)
-		    clientThread.start()
+                startClientThread = True
+                clientSocket = None
+                try:
+                        clientSocket, clientAddress = serverSocket.accept()
+                except Exception, e:
+                    error("socket accept failed: %s" % str(e))
+                    del clientSocket
+                    startClientThread = False
+                if startClientThread:
+                    clientSocket.settimeout(config.SOCKET_TIMEOUT)
+                    clientConnection = Connection(clientSocket, clientAddress)
+                    clientThread = ClientThread(config, clientConnection, clientAddress, filedb, copycount, stat)
+                    clientThread.start()
         finally:
             serverSocket.close()
             writer.stop()
