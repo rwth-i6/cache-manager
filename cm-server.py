@@ -275,7 +275,7 @@ class FileDatabase:
                     r = l
         if r == None:
             if counter and nFiles > 1:
-                locList = filter(lambda l: counter.hasAvailableSlots(l.host), record)
+                locList = list(filter(lambda l: counter.hasAvailableSlots(l.host), record))
                 if locList:
                     r = locList[random.randint(0, len(locList)-1)]
         if r == None:
